@@ -1,0 +1,12 @@
+.git
+.gitignore
+.DS_Store
+__pycache__/
+*.pyc
+.env
+
+# Generated lab data and dependency caches
+data/**
+!data/**/
+!data/**/.gitkeep
+

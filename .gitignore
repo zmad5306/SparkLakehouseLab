@@ -1,0 +1,12 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+# Local environment
+.env
+
+# Generated lab data and dependency caches
+data/**
+!data/**/
+!data/**/.gitkeep
+
