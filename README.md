@@ -2,7 +2,7 @@
 
 Local hands-on lab for learning a small medallion-style lakehouse with Apache Spark, Parquet, Delta Lake, Spark SQL, the Spark Thrift Server, and DBeaver.
 
-The repo is intentionally simple and learning-first. You generate synthetic ecommerce data, transform it into a cleaned Silver layer, publish Gold datasets in both Parquet and Delta formats, and optionally query the Delta tables through a SQL client without hiding the moving parts behind a managed platform.
+The repo is intentionally simple and learning-first. You generate synthetic ecommerce data, transform it into a cleaned Silver layer, publish Gold datasets as Delta tables, and optionally query them through a SQL client without hiding the moving parts behind a managed platform.
 
 ## What This Lab Covers
 
@@ -19,8 +19,7 @@ The pipeline produces:
 | --- | --- | --- | --- |
 | Raw | `data/raw` | NDJSON | Source-style landing data |
 | Silver | `data/silver` | Parquet | Cleaned, typed, and flattened datasets |
-| Gold | `data/gold` | Parquet | Business-friendly aggregates without Delta |
-| Gold Delta | `data/gold_delta` | Delta Lake | Lakehouse tables with transaction logs |
+| Gold | `data/gold_delta` | Delta Lake | Business-ready analytical tables with transaction logs |
 | SQL Access | Spark Thrift Server | JDBC / HiveServer2 | Query Delta tables from DBeaver |
 
 ## Learning Goals
@@ -44,7 +43,6 @@ If you want the shortest mental model:
 Synthetic JSON events
   -> data/raw
   -> Silver Parquet tables
-  -> Gold Parquet datasets
   -> Gold Delta tables
   -> Spark Thrift Server
   -> DBeaver / JDBC client
@@ -58,12 +56,10 @@ spark-lakehouse-lab/
 ├─ apps/
 │  ├─ bronze_to_silver.py
 │  ├─ generate_raw_data.py
-│  ├─ silver_to_gold.py
 │  └─ silver_to_gold_delta.py
 ├─ data/
 │  ├─ raw/
 │  ├─ silver/
-│  ├─ gold/
 │  ├─ gold_delta/
 │  └─ .ivy2/
 └─ README.md
@@ -160,40 +156,9 @@ What you are learning in Silver:
 * how nested data becomes a flatter analytical shape
 * how typed and partitioned Parquet is easier to work with than raw JSON
 
-## 3. Build the Gold Parquet Layer
+## 3. Build the Gold Delta Layer
 
-This job creates analytical datasets in plain Parquet under `data/gold`.
-
-Produced datasets:
-
-* `daily_store_sales`
-* `product_sales`
-* `payment_summary`
-* `order_fulfillment`
-
-Run it:
-
-```bash
-docker exec -it spark-client /opt/spark/bin/spark-submit \
-  --master spark://spark-master:7077 \
-  /opt/spark/apps/silver_to_gold.py
-```
-
-Verify:
-
-```bash
-find data/gold -maxdepth 2 -type d | sort
-```
-
-What you are learning in Gold:
-
-* business grain matters more than source shape
-* analytical outputs are usually aggregates or curated joins
-* Gold is often the handoff point to a serving or warehouse layer
-
-## 4. Build the Gold Delta Layer
-
-This job creates the same analytical datasets as Delta Lake tables under `data/gold_delta`.
+This job creates analytical Gold datasets as Delta Lake tables under `data/gold_delta`.
 
 The first run needs an Ivy cache location for downloaded Delta jars:
 
@@ -221,7 +186,7 @@ find data/gold_delta -maxdepth 3 -type d | grep _delta_log
 
 ## Gold Dataset Definitions
 
-Both Gold jobs build the same four outputs:
+The Gold Delta job builds these four outputs:
 
 ### `daily_store_sales`
 
@@ -379,24 +344,26 @@ If your goal is "online querying" or a more warehouse-like experience, the next 
 
 Two good local options:
 
-* DuckDB: the fastest feedback loop for local analytics because it can query Parquet files directly
+* DuckDB: the fastest feedback loop for local analytics if you want to query exported Parquet data or a later serving copy
 * Postgres: a more realistic EDW path if you want to model dimensions, facts, and indexed reporting tables
 
-Example DuckDB query against the Parquet Gold layer:
+Because Gold in this repo is Delta-first, a simple local pattern is:
+
+* use Spark SQL or Spark Thrift Server directly against Delta while learning
+* or materialize/export curated data into a serving layer such as DuckDB or Postgres
+
+Example Spark SQL registration for the Delta Gold layer:
 
 ```sql
-SELECT
-  category,
-  SUM(revenue) AS revenue
-FROM read_parquet('data/gold/product_sales/*/*.parquet')
-GROUP BY category
-ORDER BY revenue DESC;
+CREATE TABLE IF NOT EXISTS gold_product_sales
+USING DELTA
+LOCATION '/opt/spark/data/gold_delta/product_sales';
 ```
 
 That separation is worth understanding:
 
 * Spark = transform and batch compute
-* Gold = curated analytical outputs
+* Delta Gold = curated analytical outputs
 * DuckDB or Postgres = serving/query layer
 
 ## Notes on Bronze vs Raw
